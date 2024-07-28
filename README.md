@@ -1,2 +1,2 @@
 # RAG_Techniques
-RAG Techniques
+Retrieval Augmented Generation Techniques
