@@ -4,3 +4,6 @@ langchain-community
 tiktoken
 python-dotenv
 pypdf
+boto3==1.34.51
+botocore==1.34.51
+opensearch-py==2.6.0
