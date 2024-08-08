@@ -11,7 +11,6 @@ class OpenSearchVectorSearch:
         self.OPENSEARCH_PASSWORD = OPENSEARCH_PASSWORD
 
     def get_opensearch_client(self):
-
         # creating the client with SSL/TLS enabled
         client = OpenSearch(
             hosts=[{"host": "localhost", "port": self.OPENSEARCH_PORT}],
@@ -52,7 +51,6 @@ class OpenSearchVectorSearch:
         results = client.search(index=index_name, 
                                 body=query)
         return results["hits"]["hits"] 
-    
 
     def keyword_search(self, index_name, query, top_k):
         client = self.get_opensearch_client()
@@ -67,13 +65,81 @@ class OpenSearchVectorSearch:
                     "text": query
                 }
             },
-            "size": top_k
+        "size": top_k
         }
         results = client.search(index=index_name, 
                                 body=query)
         return results["hits"]["hits"]
+    
+    def _hybrid_search(self, options: dict):
+        payload = {
+            "_source": {
+                 "exclude": [
+                    "vector_field"
+                    ]
+                },
+            "query": {
+                    "hybrid": {
+                        "queries": [
+                                {
+                                "match": {
+                                    "text": {
+                                        "query": options["query"],
+                                            }
+                                        }
+                                },
+                                {
+                                "knn": {
+                                        "vector_field": {
+                                        "vector": options["embeded_query"],
+                                        "k": options["top_k"]
+                                        }
+                                    }
+                                }
+                            ]
+                        }       
+                    },
+        "size":options["top_k"],     
+        }
 
-    def hybrid_search(self, query, top_k, index_name, search_pipeline_name):
+        return payload
+    
+
+    def _hybrid_search_with_post_filter(self, options: dict):
+        payload = {
+            "_source": {
+                 "exclude": [
+                    "vector_field"
+                    ]
+                },
+            "query": {
+                    "hybrid": {
+                        "queries": [
+                                {
+                                "match": {
+                                    "text": {
+                                        "query": options["query"],
+                                            }
+                                        }
+                                },
+                                {
+                                "knn": {
+                                        "vector_field": {
+                                        "vector": options["embeded_query"],
+                                        "k": options["top_k"]
+                                        }
+                                    }
+                                }
+                            ]
+                        }       
+                    },
+        "size":options["top_k"], 
+        "post_filter": options["post_filter"]      
+        }
+
+        return payload
+
+    def hybrid_search(self, query: str, top_k: int, index_name: str, search_pipeline_name: str, post_filter: dict={}):
         path = f"{index_name}/_search?search_pipeline={search_pipeline_name}" 
         auth = (self.OPENSEARCH_USERNAME, self.OPENSEARCH_PASSWORD)
         url = self.OPENSEARCH_URL + ":" + self.OPENSEARCH_PORT + "/" + path
@@ -81,34 +147,22 @@ class OpenSearchVectorSearch:
         # embedding query 
         embeded_query = self.embed_query(query)
 
-        payload = {
-        "_source": {
-            "exclude": [
-            "vector_field"
-            ]
-        },
-        "query": {
-            "hybrid": {
-            "queries": [
-                {
-                "match": {
-                    "caption": {
-                    "query": query
-                    }
-                }
-                },
-                {
-                "knn": {
-                    "vector_field": {
-                    "vector": embeded_query,
-                    "k": top_k
-                    }
-                }
-                }
-            ]
-            }
-        },"size":top_k
+        options =  {
+            "query": query,
+            "top_k": top_k,
+            "embeded_query": embeded_query,
+            "url": url,
+            "auth": auth,
+            "post_filter": post_filter
         }
+
+        # if post filter is provided
+        if post_filter != {}: 
+            # hybrid search with post filter
+            payload = self._hybrid_search_with_post_filter(options)
+        else:
+            # hybrid search without post filter
+            payload = self._hybrid_search(options)
 
         r = requests.get(url, auth=auth, json=payload, verify=False)
         results = r.json()
